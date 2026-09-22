@@ -317,14 +317,31 @@
     transition:max-height 0.45s cubic-bezier(0.22, 1, 0.36, 1);
   }
   .item-body-inner{
-    padding:0 20px 24px 56px;
+    padding:38px 20px 24px 56px;
     font-size:15.5px;
     font-weight:400;
     line-height:1.65;
     letter-spacing:-0.003em;
+    position:relative;
   }
   .item-body-inner p{margin:0 0 14px;}
   .item-body-inner p:last-child{margin-bottom:0;}
+  .copy-btn{
+    position:absolute;
+    top:4px;
+    right:20px;
+    width:30px; height:30px;
+    border:none;
+    border-radius:50%;
+    background:var(--accent-soft);
+    color:var(--accent);
+    cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+    transition:background 0.15s ease, transform 0.15s ease;
+  }
+  .copy-btn:hover{transform:scale(1.06);}
+  .copy-btn:active{transform:scale(0.9);}
+  .copy-btn.copied{color:#fff; background:var(--accent);}
   .subhead{
     font-size:11.5px;
     font-weight:600;
@@ -667,7 +684,7 @@
   <div class="pending-view" id="pendingView" style="display:none;"></div>
   <p class="empty" id="empty" style="display:none;">Ничего не найдено — попробуйте другой запрос.</p>
 
-  <section class="path-footer">
+  <section class="path-footer" id="pathFooter" style="display:none;">
     <p class="path-footer-title">Пути</p>
     <div class="path-view" id="pathView"></div>
   </section>
@@ -1099,6 +1116,53 @@ function closeSvg(){
   return `<svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M1.5 1.5L10.5 10.5M10.5 1.5L1.5 10.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>`;
 }
 
+function copySvg(){
+  return `<svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="4.5" y="4.5" width="8" height="8" rx="1.5" stroke="currentColor" stroke-width="1.4"/><path d="M2.5 9.5V2.5C2.5 1.94772 2.94772 1.5 3.5 1.5H9.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>`;
+}
+function copiedSvg(){
+  return `<svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M2.5 7L5.5 10L11.5 3.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+}
+
+async function copyText(text, btn){
+  try{
+    await navigator.clipboard.writeText(text);
+  } catch(e){
+    try{
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+    } catch(e2){ /* copy unavailable */ }
+  }
+  if(btn){
+    btn.innerHTML = copiedSvg();
+    btn.classList.add("copied");
+    setTimeout(() => {
+      btn.innerHTML = copySvg();
+      btn.classList.remove("copied");
+    }, 1400);
+  }
+}
+
+function wireCopyButtons(container){
+  container.querySelectorAll(".copy-btn").forEach(btn => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const inner = btn.closest(".item-body-inner");
+      const parts = [];
+      inner.querySelectorAll("p, li").forEach(node => {
+        const t = node.textContent.replace(/\s+/g, " ").trim();
+        if(t) parts.push(t);
+      });
+      copyText(parts.join("\n"), btn);
+    });
+  });
+}
+
 function getDone(id){
   try{
     return localStorage.getItem("glossary-path-" + id) === "1";
@@ -1156,19 +1220,21 @@ function showTab(tab){
   const search = document.getElementById("search");
   const count = document.getElementById("count");
   const empty = document.getElementById("empty");
+  const pathFooter = document.getElementById("pathFooter");
 
   pendingView.style.display = "none";
   list.style.display = "none";
   empty.style.display = "none";
+  search.style.display = "block";
+  pathFooter.style.display = "none";
 
   if(tab === "pending"){
-    search.style.display = "none";
     count.style.display = "none";
     pendingView.style.display = "flex";
+    pathFooter.style.display = "block";
     renderPending();
   } else {
     list.style.display = "flex";
-    search.style.display = "block";
     count.style.display = "block";
     renderList();
   }
@@ -1271,6 +1337,7 @@ function renderPending(){
           </button>
           <div class="item-body">
             <div class="item-body-inner">
+              <button class="copy-btn" aria-label="Копировать описание">${copySvg()}</button>
               <p>${escapeHtml(p.description) || "Без описания."}</p>
               <div class="pending-footer">
                 <span class="pending-type-badge">${typeLabel}</span>
@@ -1338,6 +1405,7 @@ function renderPending(){
   });
 
   wireAccordionItems(view);
+  wireCopyButtons(view);
 }
 
 function iconSvg(){
@@ -1396,7 +1464,7 @@ function renderList(){
             ? `<span class="slang-tag">${d.origin}</span>`
             : `<p class="origin-line">англ. ${d.origin}${d.literal ? " — дословно " + d.literal : ""}</p>`);
 
-      let inner = d.body || "";
+      let inner = `<button class="copy-btn" aria-label="Копировать описание">${copySvg()}</button>` + (d.body || "");
       if(d.extraHead){
         inner += `<p class="subhead">${d.extraHead}</p><ul class="plain-list">${(d.extraList||[]).map(x=>`<li>${x}</li>`).join("")}</ul>`;
       }
@@ -1433,7 +1501,7 @@ function renderList(){
   if(leftover.length){
     html += leftover.map(d => {
       idx++;
-      return `<div class="item" data-open="false" data-idx="${idx}"><button class="item-head" aria-expanded="false">${iconSvg()}<div class="head-text"><p class="term-name">${d.term}</p></div></button><div class="item-body"><div class="item-body-inner">${d.body||""}</div></div></div>`;
+      return `<div class="item" data-open="false" data-idx="${idx}"><button class="item-head" aria-expanded="false">${iconSvg()}<div class="head-text"><p class="term-name">${d.term}</p></div></button><div class="item-body"><div class="item-body-inner"><button class="copy-btn" aria-label="Копировать описание">${copySvg()}</button>${d.body||""}</div></div></div>`;
     }).join("");
   }
 
@@ -1444,6 +1512,7 @@ function renderList(){
   list.innerHTML = html;
 
   wireAccordionItems(list);
+  wireCopyButtons(list);
 
   wireAddPromptButton(trimmedQuery);
 }
